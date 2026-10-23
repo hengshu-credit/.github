@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner-static.png?v=20261024-3">
-    <source type="image/webp" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.webp?v=20261024-3">
-    <img src="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.gif?v=20261024-3" alt="衡枢真信 — 专注金融风控技术与服务：风控能力输出、模型评分服务、分析工具开源；HSCredit、天枢决策引擎、瑶光营销平台" width="100%">
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner-static.png?v=20261024-4">
+    <source type="image/webp" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.webp?v=20261024-4">
+    <img src="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.gif?v=20261024-4" alt="衡枢真信 — 专注金融风控技术与服务：风控能力输出、模型评分服务、分析工具开源；HSCredit、天枢决策引擎、瑶光营销平台" width="100%">
   </picture>
 </p>
 

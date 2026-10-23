@@ -17,6 +17,8 @@ import moderngl
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from scipy.ndimage import distance_transform_edt
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import dijkstra
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.geometry.polygon import orient
 from svgpathtools import parse_path
@@ -76,6 +78,40 @@ def logo_source():
             if child.tag.endswith('animate'): parent.remove(child)
     rgba=Image.open(BytesIO(cairosvg.svg2png(bytestring=ET.tostring(root),output_width=1200,output_height=1200))).convert('RGBA')
     return paths,rgba
+
+
+def stroke_reveal_field(path,size=1200):
+    """Propagate through the actual filled stroke, keeping every reveal connected.
+
+    The former circle/connector partitions cut across the vector shape and could
+    create detached fragments. Shortest-path arrival inside the original mask
+    gives a single continuous drawing front, including at branching junctions.
+    """
+    svg=ET.Element('svg',{'xmlns':'http://www.w3.org/2000/svg','viewBox':f'0 0 {V} {V}'})
+    ET.SubElement(svg,'path',{'d':path,'fill':'white'})
+    raster=Image.open(BytesIO(cairosvg.svg2png(bytestring=ET.tostring(svg),output_width=size,output_height=size))).convert('RGBA')
+    mask=np.asarray(raster.getchannel('A'))>127
+    points=np.argwhere(mask)
+    ids=np.full(mask.shape,-1,dtype=np.int32)
+    ids[mask]=np.arange(len(points),dtype=np.int32)
+    rows=[];columns=[];costs=[]
+    for dy,dx in [(0,1),(1,-1),(1,0),(1,1)]:
+        a=ids[max(0,-dy):min(size,size-dy),max(0,-dx):min(size,size-dx)]
+        b=ids[max(0,dy):min(size,size+dy),max(0,dx):min(size,size+dx)]
+        connected=(a>=0)&(b>=0)
+        rows.append(a[connected]);columns.append(b[connected])
+        costs.append(np.full(np.count_nonzero(connected),math.hypot(dx,dy),dtype=np.float32))
+    graph=coo_matrix((np.concatenate(costs),(np.concatenate(rows),np.concatenate(columns))),shape=(len(points),len(points))).tocsr()
+    # Start inside the rounded upper-arc endpoint, in original SVG coordinates.
+    seed=np.argmin(np.sum((points-np.array([105.,345.])*size/V)**2,axis=1))
+    arrival=dijkstra(graph,directed=False,indices=seed)
+    if not np.isfinite(arrival).all():raise ValueError('The main logo stroke must be connected')
+    order=np.zeros(mask.shape,dtype=np.float32)
+    order[mask]=arrival/arrival.max()
+    # Extend to the exact vector boundary so side faces have no unfilled fringe.
+    nearest=distance_transform_edt(~mask,return_distances=False,return_indices=True)
+    order[~mask]=order[nearest[0][~mask],nearest[1][~mask]]
+    return order,mask
 
 
 def logo_mesh(paths):
@@ -148,24 +184,17 @@ uv=in_uv;face=abs(in_normal.z);gl_Position=vp*p;}
 '''
 FRAGMENT='''#version 330
 in vec3 pos;in vec3 n;in vec2 uv;in float face;
-uniform sampler2D logo;uniform sampler2D bevel;uniform mat4 model;
+uniform sampler2D logo;uniform sampler2D bevel;uniform sampler2D revealMap;uniform mat4 model;
 uniform float reveal;uniform float opacity;uniform int part;out vec4 color;
 void main(){
  float drawingHead=0.;
+ float coverage=1.;
  if(part==8 && reveal<.9999){
-   float order;
-   // Follow the two circular outlines before filling their joining strokes.
-   float upperRadius=length(uv-vec2(.433,.755));
-   float lowerRadius=length(uv-vec2(.60,.425));
-   if(uv.y>.54 && upperRadius>.14 && upperRadius<.245){
-     float a=atan(uv.y-.755,uv.x-.433);
-     order=.38*fract((a-.12)/6.2831853);
-   }else if(uv.y<.64 && lowerRadius>.13 && lowerRadius<.245){
-     float a=atan(uv.y-.425,uv.x-.60);
-     order=.40+.38*fract((a+2.25)/6.2831853);
-   }else{order=.80+.19*clamp((.98-uv.y)/.55,0.,1.);}
-   if(order>reveal)discard;
-   drawingHead=exp(-pow((order-reveal)/.018,2.));
+   float order=texture(revealMap,uv).r;
+   float feather=max(fwidth(order),.0008);
+   coverage=1.-smoothstep(reveal-feather,reveal+feather,order);
+   if(coverage<.001)discard;
+   drawingHead=exp(-pow((order-reveal)/.012,2.));
  }
  vec3 bevelNormal=mat3(model)*(texture(bevel,uv).rgb*2.-1.);
  vec3 norm=normalize(mix(n,bevelNormal,step(.5,face))),view=normalize(vec3(0.,0.,7.2)-pos);
@@ -177,7 +206,7 @@ void main(){
  float hue=clamp(uv.x*.6+(1.-uv.y)*.4,0.,1.);
  vec3 edge=mix(vec3(.14,.34,.50),vec3(.31,.13,.44),hue);
  vec3 side=edge*(.5+.7*diffuse)+vec3(.4,.5,.65)*spec;
- color=vec4(mix(side,front,step(.5,face)),opacity);
+ color=vec4(mix(side,front,step(.5,face)),opacity*coverage);
 }
 '''
 
@@ -202,6 +231,11 @@ def main():
     normal_image=Image.fromarray(np.uint8(np.clip(normals*.5+.5,0,1)*255),'RGB')
     bevel=ctx.texture(logo.size,3,normal_image.transpose(Image.Transpose.FLIP_TOP_BOTTOM).tobytes())
     bevel.filter=(moderngl.LINEAR,moderngl.LINEAR);bevel.use(1);prog['bevel'].value=1
+    reveal_order,_=stroke_reveal_field(paths[8],logo.width)
+    reveal_map=ctx.texture(logo.size,1,np.flipud(reveal_order).copy().tobytes(),dtype='f4')
+    reveal_map.filter=(moderngl.LINEAR,moderngl.LINEAR)
+    reveal_map.repeat_x=False;reveal_map.repeat_y=False
+    reveal_map.use(2);prog['revealMap'].value=2
     vaos=[ctx.vertex_array(prog,[(ctx.buffer(p),'3f 3f 2f','in_pos','in_normal','in_uv')]) for p in parts]
     f=1/math.tan(math.radians(36)/2)
     projection=np.array([[f/(SW/SH),0,0,0],[0,f,0,0],[0,0,-1.004,-.2004],[0,0,-1,0]])
@@ -225,7 +259,9 @@ def main():
             elif part_index in (6,7):
                 progress=smoothstep((seconds-(.95 if part_index==7 else 1.10))/.65)
                 offset=np.eye(4)
-                offset[:2,3]=np.array([-.4,-.72] if part_index==7 else [.3,.55])*(1-progress)
+                # The short stroke stays inside the lower arc's opening rather
+                # than crossing the central connector on the same depth plane.
+                offset[:2,3]=np.array([-.4,-.72] if part_index==7 else [.02,-.08])*(1-progress)
                 model=base@offset;alpha*=progress
             else:
                 progress=smoothstep((seconds-(1.40+part_index*.085))/.38)
