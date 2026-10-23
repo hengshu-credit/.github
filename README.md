@@ -5,7 +5,8 @@
 ## 文件说明
 
 - `profile/README.md`：展示在组织 Overview 页面的公开介绍。
-- `profile/assets/banner.gif`：基于 HSCredit 原始 Logo 的 3D 动态横幅，96 帧、6 秒循环。
+- `profile/assets/banner.webp`：无损全彩 3D 动态横幅，96 帧、4.8 秒循环。
+- `profile/assets/banner.gif`：兼容不支持 WebP 的浏览器的动画版本。
 - `profile/assets/banner-static.png`：静态横幅，供启用减少动态效果的访客使用。
 - `profile/assets/hscredit-logo.svg`：官网原始矢量 Logo，作为立体几何和配色的来源。
 - `profile/assets/wechat.svg`：微信二维码。
@@ -29,8 +30,9 @@ GitHub 会从组织的公开 `.github` 仓库读取 `profile/README.md`。
 ## 重新生成动态横幅
 
 原始 Logo 来源：`https://hengshucredit.com/images/hengshucredit_animated.svg`。
-渲染器沿用原始矢量路径和渐变，通过轮廓挤出、边缘高光与轻微摆动呈现立体效果。
-生成文件为 GIF，GitHub 无需执行脚本即可展示动画；README 同时提供减少动态效果的静态版本。
+渲染器沿用原始矢量路径和渐变，通过轮廓挤出、明显的左右摆动、浮动和移动高光呈现立体效果。
+横幅以大字号中文展示官网已有定位，并列出 HSCredit、天枢决策引擎和瑶光营销平台的既有介绍。
+优先展示无损 WebP，保留渐变与字体细节；以 GIF 兼容其他浏览器。GitHub 无需执行脚本即可展示动画；README 同时提供减少动态效果的静态版本。
 
 在具备 OpenGL 3.3 驱动、Cairo 运行库和 Windows Segoe UI / 微软雅黑字体的环境中运行：
 
@@ -40,4 +42,16 @@ python tools/render_banner.py --preview
 python tools/render_banner.py
 ```
 
-`--preview` 仅更新静态预览；正式生成会同时更新 GIF 和静态横幅。
+`--preview` 仅更新静态预览；正式生成会同时更新 WebP、GIF 和静态横幅。
+
+## 横幅文案来源
+
+文案核对日期：2026-10-24。以下短语均取自官网或对应项目介绍，横幅仅调整换行和排版。
+
+| 展示内容 | 原始来源 |
+| --- | --- |
+| 专注金融风控技术与服务 | [官网首页](https://hengshucredit.com/) |
+| 风控能力输出、模型评分服务、分析工具开源 | [官网核心业务](https://hengshucredit.com/solutions/)的三个栏目名称 |
+| HSCredit：全流程量化工具箱 | [HSCredit README](https://github.com/hengshu-credit/hscredit)：面向信贷风控的全流程量化工具箱 |
+| 天枢决策引擎：可视化风控决策平台 | [天枢仓库简介](https://github.com/hengshu-credit/tianshu-decision-engine) |
+| 瑶光营销平台：用户营销与客户触达 | [瑶光 README](https://github.com/hengshu-credit/yaoguang-marketing)的项目定位 |

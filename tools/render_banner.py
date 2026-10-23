@@ -1,4 +1,4 @@
-"""Render the original HSCredit vector logo as a gently moving 3D brand hero.
+"""Render the original HSCredit logo with prominent 3D motion and positioning.
 
 python tools/render_banner.py --preview
 python tools/render_banner.py
@@ -26,11 +26,13 @@ ASSETS = ROOT/'profile'/'assets'
 W,H = 1600,520
 SW,SH = 760,600
 V = 566.92914
+DEPTH = .16
+LOOP_MS = 4800
 
 
 def font(size,bold=False,chinese=False):
     folder=Path(os.environ.get('WINDIR','C:/Windows'))/'Fonts'
-    name='msyh.ttc' if chinese else ('segoeuib.ttf' if bold else 'segoeui.ttf')
+    name=('msyhbd.ttc' if bold else 'msyh.ttc') if chinese else ('segoeuib.ttf' if bold else 'segoeui.ttf')
     return ImageFont.truetype(str(folder/name),size)
 
 
@@ -44,7 +46,8 @@ def label(draw,xy,text,size,color,spacing=2):
 def rotation(a,axis):
     c,s=math.cos(a),math.sin(a); m=np.eye(4)
     if axis=='y': m[:3,:3]=[[c,0,s],[0,1,0],[-s,0,c]]
-    else: m[:3,:3]=[[1,0,0],[0,c,-s],[0,s,c]]
+    elif axis=='x': m[:3,:3]=[[1,0,0],[0,c,-s],[0,s,c]]
+    else: m[:3,:3]=[[c,-s,0],[s,c,0],[0,0,1]]
     return m
 
 
@@ -87,13 +90,13 @@ def logo_mesh(paths):
             coords=np.concatenate(rings)
             ends=np.cumsum([len(r) for r in rings],dtype='uint32')
             indices=mapbox_earcut.triangulate_float64(coords,ends)
-            for i in indices: vertices.append(vertex(coords[i],.095,[0,0,1]))
-            for i in indices[::-1]: vertices.append(vertex(coords[i],-.095,[0,0,-1]))
+            for i in indices: vertices.append(vertex(coords[i],DEPTH,[0,0,1]))
+            for i in indices[::-1]: vertices.append(vertex(coords[i],-DEPTH,[0,0,-1]))
             for ring in rings:
                 for a,b in zip(ring,np.roll(ring,-1,axis=0)):
                     delta=b-a; normal=np.array([delta[1],-delta[0],0.])
                     normal/=np.linalg.norm(normal)
-                    quad=[vertex(a,-.095,normal),vertex(b,-.095,normal),vertex(b,.095,normal),vertex(a,.095,normal)]
+                    quad=[vertex(a,-DEPTH,normal),vertex(b,-DEPTH,normal),vertex(b,DEPTH,normal),vertex(a,DEPTH,normal)]
                     vertices.extend(quad[i] for i in [0,1,2,0,2,3])
     result=np.array(vertices,dtype='f4')
     assert np.isfinite(result).all()
@@ -111,18 +114,19 @@ def backdrop(logo):
     watermark.putalpha(logo.getchannel('A').resize((740,740)).point(lambda x:int(x*.032)))
     im.alpha_composite(watermark,(1030,-125))
     d=ImageDraw.Draw(im)
-    d.line((75,64,106,64),fill='#52d3ed',width=3)
-    label(d,(123,50),'HENGSHU CREDIT / OPEN SOURCE',14,'#819bb5',2.4)
-    d.text((69,105),'HENGSHU',font=font(80,True),fill='#f5f7ff')
-    d.text((69,192),'CREDIT',font=font(80,True),fill='#c6b8ff')
-    d.text((75,304),'衡枢真信',font=font(23,chinese=True),fill='#d9dfeb')
-    d.line((188,319,214,319),fill='#577188',width=1)
-    d.text((229,308),'让数据驱动决策，让技术连接业务',font=font(19,chinese=True),fill='#93a7be')
-    d.line((75,374,685,374),fill='#253044',width=1)
-    for text,x in [('RISK MODELING',75),('DECISIONS',255),('MARKETING',398),('COMMERCE',553)]:
-        d.ellipse((x,407,x+4,411),fill='#6387ac')
-        label(d,(x+14,399),text,12,'#94aac2',.6)
-    label(d,(75,474),'HENGSHUCREDIT.COM',11,'#6c819b',2)
+    d.text((72,45),'衡枢真信',font=font(36,True,True),fill='#dce7f4')
+    label(d,(244,60),'HENGSHU CREDIT',21,'#98b2cc',1.8)
+    # Copy is extracted from the website and project READMEs; see root README.
+    d.text((69,116),'专注金融风控',font=font(70,True,True),fill='#f5f8ff')
+    d.text((69,199),'技术与服务',font=font(70,True,True),fill='#b9b3ff')
+    d.text((74,298),'风控能力输出 · 模型评分服务 · 分析工具开源',font=font(27,chinese=True),fill='#b9cbe0')
+    d.line((75,347,827,347),fill='#32445f',width=1)
+    products=[('HSCredit','全流程量化工具箱',75),('天枢决策引擎','可视化风控决策平台',333),
+              ('瑶光营销平台','用户营销与客户触达',591)]
+    for product,capability,x in products:
+        d.text((x,366),product,font=font(29,True,product!='HSCredit'),fill='#e0eaf7')
+        d.text((x,410),capability,font=font(24,chinese=True),fill='#a9bfd7')
+    label(d,(75,478),'HENGSHUCREDIT.COM',17,'#88a5c2',1.8)
     return im
 
 
@@ -139,15 +143,15 @@ uniform sampler2D logo;uniform sampler2D bevel;uniform mat4 model;uniform float 
 void main(){
  vec3 bevelNormal=mat3(model)*(texture(bevel,uv).rgb*2.-1.);
  vec3 norm=normalize(mix(n,bevelNormal,step(.5,face))),view=normalize(vec3(0.,0.,7.2)-pos);
- vec3 light=normalize(vec3(-3.+sin(phase)*2.,4.,6.)-pos);
+ vec3 light=normalize(vec3(-3.+sin(phase)*4.,4.,6.)-pos);
  float diffuse=max(dot(norm,light),0.);
  float spec=pow(max(dot(norm,normalize(light+view)),0.),80.);
  vec3 original=texture(logo,uv).rgb;
- float sweep=exp(-pow((uv.x+.3*uv.y-(.65+.5*sin(phase)))*13.,2.));
- vec3 front=original*(.91+.09*diffuse)+vec3(.12,.16,.2)*spec+vec3(.035,.06,.08)*sweep;
+ float sweep=exp(-pow((uv.x+.3*uv.y-(.65+.8*sin(phase)))*10.,2.));
+ vec3 front=original*(.88+.12*diffuse)+vec3(.18,.24,.3)*spec+vec3(.22,.32,.40)*sweep;
  float hue=clamp(uv.x*.6+(1.-uv.y)*.4,0.,1.);
- vec3 edge=mix(vec3(.035,.28,.45),vec3(.20,.04,.36),hue);
- vec3 side=edge*(.4+.7*diffuse)+vec3(.3,.4,.6)*spec;
+ vec3 edge=mix(vec3(.06,.40,.62),vec3(.31,.07,.52),hue);
+ vec3 side=edge*(.5+.7*diffuse)+vec3(.3,.4,.6)*spec;
  color=vec4(mix(side,front,step(.5,face)),1.);
 }
 '''
@@ -182,27 +186,38 @@ def main():
     bg=backdrop(logo);frames=[];count=1 if args.preview else args.frames
     for i in range(count):
         phase=math.tau*i/args.frames
-        model=rotation(.10+.20*math.sin(phase),'y')@rotation(.05*math.cos(phase),'x')
-        model[1,3]=.02*math.sin(phase)
+        model=rotation(.08+.62*math.sin(phase),'y')@rotation(.16*math.cos(phase),'x')@rotation(.035*math.sin(phase),'z')
+        model[:3,:3]*=1.+.035*math.sin(phase)
+        model[1,3]=.09*math.sin(2*phase)
         prog['model'].write(model.T.astype('f4').tobytes());prog['phase'].value=phase
         ms.use();ms.clear(0,0,0,0);vao.render();ctx.copy_framebuffer(fbo,ms)
         scene=Image.frombytes('RGBA',(SW,SH),fbo.read(components=4,alignment=1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         frame=bg.copy()
-        glow=scene.filter(ImageFilter.GaussianBlur(20));glow.putalpha(glow.getchannel('A').point(lambda a:int(a*.18)))
+        glow=scene.filter(ImageFilter.GaussianBlur(20))
+        intensity=.26+.10*math.sin(phase)
+        glow.putalpha(glow.getchannel('A').point(lambda a:int(a*intensity)))
         frame.alpha_composite(glow,(790,-40));frame.alpha_composite(scene,(790,-40))
         mask=Image.new('L',(W,H));ImageDraw.Draw(mask).rounded_rectangle((0,0,W-1,H-1),radius=24,fill=255)
         frame.putalpha(mask)
         if i==0: frame.save(ASSETS/'banner-static.png',optimize=True)
-        frames.append(frame.convert('RGB').resize((1280,416),Image.Resampling.LANCZOS))
+        frames.append(frame.convert('RGB').resize((1440,468),Image.Resampling.LANCZOS))
         if i%24==0: print(f'Rendered {i+1}/{count}',flush=True)
     if not args.preview:
-        samples=[frames[i].resize((320,104)) for i in range(0,count,8)]
-        atlas=Image.new('RGB',(320,104*len(samples)))
-        for i,im in enumerate(samples):atlas.paste(im,(0,104*i))
+        # Give the logo extra palette weight so gradients retain their brand colors.
+        samples=[]
+        for i in range(0,count,8):
+            samples.append(frames[i].resize((320,104)))
+            samples.append(frames[i].crop((870,20,1230,425)).resize((320,360)))
+        atlas=Image.new('RGB',(320,sum(im.height for im in samples)))
+        y=0
+        for im in samples:
+            atlas.paste(im,(0,y));y+=im.height
         palette=atlas.quantize(colors=256,method=Image.Quantize.MEDIANCUT)
-        indexed=[f.quantize(palette=palette,dither=Image.Dither.FLOYDSTEINBERG) for f in frames]
-        durations=[round((i+1)*600/args.frames)*10-round(i*600/args.frames)*10 for i in range(args.frames)]
+        indexed=[f.quantize(palette=palette,dither=Image.Dither.NONE) for f in frames]
+        durations=[round((i+1)*(LOOP_MS/10)/args.frames)*10-round(i*(LOOP_MS/10)/args.frames)*10 for i in range(args.frames)]
+        frames[0].save(ASSETS/'banner.webp',format='WEBP',save_all=True,append_images=frames[1:],duration=durations,loop=0,lossless=True,method=4)
         indexed[0].save(ASSETS/'banner.gif',save_all=True,append_images=indexed[1:],duration=durations,loop=0,optimize=True,disposal=1)
+        print('Lossless WebP bytes:',(ASSETS/'banner.webp').stat().st_size,flush=True)
         print('GIF bytes:',(ASSETS/'banner.gif').stat().st_size,flush=True)
 
 
