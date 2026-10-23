@@ -21,7 +21,8 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import dijkstra
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.geometry.polygon import orient
-from svgpathtools import parse_path
+from shapely.ops import unary_union
+from svgpathtools import parse_path, Path as SVGPath, CubicBezier
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT/'profile'/'assets'
@@ -83,9 +84,9 @@ def logo_source():
 def stroke_reveal_field(path,size=1200):
     """Propagate through the actual filled stroke, keeping every reveal connected.
 
-    The former circle/connector partitions cut across the vector shape and could
-    create detached fragments. Shortest-path arrival inside the original mask
-    gives a single continuous drawing front, including at branching junctions.
+    Called with the separated S outline, so the drawing front follows S through
+    the crossing instead of branching into the H stems. The original silhouette
+    is restored by monogram_layers when the separately drawn letters combine.
     """
     svg=ET.Element('svg',{'xmlns':'http://www.w3.org/2000/svg','viewBox':f'0 0 {V} {V}'})
     ET.SubElement(svg,'path',{'d':path,'fill':'white'})
@@ -114,42 +115,77 @@ def stroke_reveal_field(path,size=1200):
     return order,mask
 
 
-def logo_mesh(paths):
+def path_geometry(data):
+    compound=None
+    for subpath in parse_path(data).continuous_subpaths():
+        points=[]
+        for segment in subpath:
+            count=max(2,int(math.ceil(segment.length()/1.5)))
+            for t in np.linspace(0,1,count,endpoint=False):
+                q=segment.point(t)
+                points.append(((q.real-V/2)/180,(V/2-q.imag)/180))
+        if len(points)<3:continue
+        polygon=Polygon(points).buffer(0)
+        compound=polygon if compound is None else compound.symmetric_difference(polygon)
+    return compound
+
+
+def geometry_mesh(compound):
     vertices=[]
     def vertex(p,z,n):
         x,y=p
         return [x,y,z,*n,(x*180+V/2)/V,(y*180+V/2)/V]
-    for data in paths:
-        compound=None
-        for subpath in parse_path(data).continuous_subpaths():
-            points=[]
-            for segment in subpath:
-                count=max(2,int(math.ceil(segment.length()/1.5)))
-                for t in np.linspace(0,1,count,endpoint=False):
-                    q=segment.point(t)
-                    points.append(((q.real-V/2)/180,(V/2-q.imag)/180))
-            if len(points)<3: continue
-            polygon=Polygon(points).buffer(0)
-            compound=polygon if compound is None else compound.symmetric_difference(polygon)
-        if compound is None: continue
-        polygons=list(compound.geoms) if isinstance(compound,MultiPolygon) else [compound]
-        for raw in polygons:
-            p=orient(raw,sign=1)
-            rings=[np.array(p.exterior.coords)[:-1]]+[np.array(r.coords)[:-1] for r in p.interiors]
-            coords=np.concatenate(rings)
-            ends=np.cumsum([len(r) for r in rings],dtype='uint32')
-            indices=mapbox_earcut.triangulate_float64(coords,ends)
-            for i in indices: vertices.append(vertex(coords[i],DEPTH,[0,0,1]))
-            for i in indices[::-1]: vertices.append(vertex(coords[i],-DEPTH,[0,0,-1]))
-            for ring in rings:
-                for a,b in zip(ring,np.roll(ring,-1,axis=0)):
-                    delta=b-a; normal=np.array([delta[1],-delta[0],0.])
-                    normal/=np.linalg.norm(normal)
-                    quad=[vertex(a,-DEPTH,normal),vertex(b,-DEPTH,normal),vertex(b,DEPTH,normal),vertex(a,DEPTH,normal)]
-                    vertices.extend(quad[i] for i in [0,1,2,0,2,3])
+    polygons=list(compound.geoms) if isinstance(compound,MultiPolygon) else [compound]
+    for raw in polygons:
+        p=orient(raw,sign=1)
+        rings=[np.array(p.exterior.coords)[:-1]]+[np.array(r.coords)[:-1] for r in p.interiors]
+        coords=np.concatenate(rings)
+        ends=np.cumsum([len(r) for r in rings],dtype='uint32')
+        indices=mapbox_earcut.triangulate_float64(coords,ends)
+        for i in indices: vertices.append(vertex(coords[i],DEPTH,[0,0,1]))
+        for i in indices[::-1]: vertices.append(vertex(coords[i],-DEPTH,[0,0,-1]))
+        for ring in rings:
+            for a,b in zip(ring,np.roll(ring,-1,axis=0)):
+                delta=b-a; normal=np.array([delta[1],-delta[0],0.])
+                normal/=np.linalg.norm(normal)
+                quad=[vertex(a,-DEPTH,normal),vertex(b,-DEPTH,normal),vertex(b,DEPTH,normal),vertex(a,DEPTH,normal)]
+                vertices.extend(quad[i] for i in [0,1,2,0,2,3])
     result=np.array(vertices,dtype='f4')
     assert np.isfinite(result).all()
     return result
+
+
+def logo_mesh(paths):
+    return np.concatenate([geometry_mesh(path_geometry(p)) for p in paths])
+
+
+def monogram_layers(paths):
+    """Separate semantic S/H strokes while exactly retaining the source silhouette.
+
+    Source path 8 flattens S together with the two upper H stems. Its actual
+    S boundary is retained; two tangent-continuous boundary bridges close S where
+    those stems branch off. H receives the remaining source pixels. The shared
+    middle stroke belongs to S, while the source's interlacing gaps stay open.
+    """
+    p=parse_path(paths[8])
+    def bridge(previous,following):
+        start,end=previous.end,following.start
+        length=abs(end-start)/3
+        before,after=previous.derivative(1),following.derivative(0)
+        return CubicBezier(start,start+before/abs(before)*length,
+                           end-after/abs(after)*length,end)
+    s_path=SVGPath(*list(p[3:6]),bridge(p[5],p[13]),*list(p[13:32]),bridge(p[31],p[3])).d()
+    main=path_geometry(paths[8])
+    s=path_geometry(s_path).intersection(main)
+    upper_h=main.difference(s)
+    pieces=list(upper_h.geoms) if isinstance(upper_h,MultiPolygon) else [upper_h]
+    left=unary_union([g for g in pieces if g.centroid.x<0]+[path_geometry(paths[7])])
+    right=unary_union([g for g in pieces if g.centroid.x>=0]+[path_geometry(paths[6])])
+    expected=unary_union([main,path_geometry(paths[6]),path_geometry(paths[7])])
+    combined=unary_union([s,left,right])
+    if combined.symmetric_difference(expected).area>1e-9:
+        raise ValueError('S/H decomposition changed the source logo silhouette')
+    return s_path,s,left,right
 
 
 def backdrop():
@@ -186,11 +222,13 @@ FRAGMENT='''#version 330
 in vec3 pos;in vec3 n;in vec2 uv;in float face;
 uniform sampler2D logo;uniform sampler2D bevel;uniform sampler2D revealMap;uniform mat4 model;
 uniform float reveal;uniform float opacity;uniform int part;out vec4 color;
+uniform vec2 strokeAxis;uniform vec2 strokeRange;
 void main(){
  float drawingHead=0.;
  float coverage=1.;
- if(part==8 && reveal<.9999){
-   float order=texture(revealMap,uv).r;
+ if(part>=8 && reveal<.9999){
+   float order=part==8 ? texture(revealMap,uv).r :
+     clamp((dot(uv,strokeAxis)-strokeRange.x)/(strokeRange.y-strokeRange.x),0.,1.);
    float feather=max(fwidth(order),.0008);
    coverage=1.-smoothstep(reveal-feather,reveal+feather,order);
    if(coverage<.001)discard;
@@ -215,6 +253,7 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--frames',type=int,default=230)
     parser.add_argument('--output-dir',type=Path,default=ASSETS)
     args=parser.parse_args();paths,logo=logo_source();parts=[logo_mesh([p]) for p in paths]
+    s_path,s_shape,h_left,h_right=monogram_layers(paths)
     output=args.output_dir;output.mkdir(parents=True,exist_ok=True)
     ctx=moderngl.create_standalone_context(require=330)
     print('Rendering original logo:',sum(len(p) for p in parts)//3,'triangles;',ctx.info['GL_RENDERER'],flush=True)
@@ -231,12 +270,22 @@ def main():
     normal_image=Image.fromarray(np.uint8(np.clip(normals*.5+.5,0,1)*255),'RGB')
     bevel=ctx.texture(logo.size,3,normal_image.transpose(Image.Transpose.FLIP_TOP_BOTTOM).tobytes())
     bevel.filter=(moderngl.LINEAR,moderngl.LINEAR);bevel.use(1);prog['bevel'].value=1
-    reveal_order,_=stroke_reveal_field(paths[8],logo.width)
+    reveal_order,_=stroke_reveal_field(s_path,logo.width)
     reveal_map=ctx.texture(logo.size,1,np.flipud(reveal_order).copy().tobytes(),dtype='f4')
     reveal_map.filter=(moderngl.LINEAR,moderngl.LINEAR)
     reveal_map.repeat_x=False;reveal_map.repeat_y=False
     reveal_map.use(2);prog['revealMap'].value=2
     vaos=[ctx.vertex_array(prog,[(ctx.buffer(p),'3f 3f 2f','in_pos','in_normal','in_uv')]) for p in parts]
+    layer_vaos={i:ctx.vertex_array(prog,[(ctx.buffer(geometry_mesh(g)),'3f 3f 2f','in_pos','in_normal','in_uv')])
+                for i,g in [(8,s_shape),(9,h_left),(10,h_right)]}
+    axis=np.array([-.415,-.910]);axis/=np.linalg.norm(axis)
+    prog['strokeAxis'].value=tuple(axis)
+    stroke_ranges={}
+    for i,g in [(9,h_left),(10,h_right)]:
+        polygons=list(g.geoms) if isinstance(g,MultiPolygon) else [g]
+        coords=np.concatenate([np.array(p.exterior.coords) for p in polygons])
+        projected=(coords*180/V+.5)@axis
+        stroke_ranges[i]=(float(projected.min()),float(projected.max()))
     f=1/math.tan(math.radians(36)/2)
     projection=np.array([[f/(SW/SH),0,0,0],[0,f,0,0],[0,0,-1.004,-.2004],[0,0,-1,0]])
     view=np.eye(4);view[2,3]=-7.2
@@ -251,26 +300,29 @@ def main():
         turn,fade=animation_state(seconds)
         base=rotation(turn+.06,'y')@rotation(.035,'x')
         ms.use();ms.clear(0,0,0,0)
-        for part_index in [8,7,6,0,1,2,3,4,5]:
+        # During assembly S is one whole letter, and each H stem is one group
+        # across the source's intentional interlacing gap. Once formed, use the
+        # original unsplit geometry for the hold and complete 360-degree turn.
+        forming=seconds<2.45
+        sequence=[8,9,10,0,1,2,3,4,5] if forming else [8,7,6,0,1,2,3,4,5]
+        for part_index in sequence:
             model=base.copy();reveal=1.;alpha=fade
-            if part_index==8:
-                reveal=smoothstep((seconds-.15)/1.45)
-                alpha*=smoothstep((seconds-.15)/.25)
-            elif part_index in (6,7):
-                progress=smoothstep((seconds-(.95 if part_index==7 else 1.10))/.65)
-                offset=np.eye(4)
-                # The short stroke stays inside the lower arc's opening rather
-                # than crossing the central connector on the same depth plane.
-                offset[:2,3]=np.array([-.4,-.72] if part_index==7 else [.02,-.08])*(1-progress)
-                model=base@offset;alpha*=progress
-            else:
-                progress=smoothstep((seconds-(1.40+part_index*.085))/.38)
+            if forming and part_index==8:
+                reveal=smoothstep((seconds-.10)/1.00)
+                alpha*=smoothstep((seconds-.10)/.20)
+            elif forming and part_index in (9,10):
+                start=1.25 if part_index==9 else 1.35
+                reveal=smoothstep((seconds-start)/.70)
+                alpha*=smoothstep((seconds-start)/.15)
+            elif forming:
+                progress=smoothstep((seconds-(1.65+part_index*.07))/.32)
                 offset=np.eye(4);offset[1,3]=-.32*(1-progress)
                 model=base@offset;alpha*=progress
             if alpha<.001:continue
             prog['model'].write(model.T.astype('f4').tobytes())
             prog['part'].value=part_index;prog['reveal'].value=reveal;prog['opacity'].value=alpha
-            vaos[part_index].render()
+            prog['strokeRange'].value=stroke_ranges.get(part_index,(0.,1.))
+            (layer_vaos[part_index] if forming and part_index>=8 else vaos[part_index]).render()
         ctx.copy_framebuffer(fbo,ms)
         scene=Image.frombytes('RGBA',(SW,SH),fbo.read(components=4,alignment=1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         frame=bg.copy()
