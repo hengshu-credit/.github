@@ -5,7 +5,7 @@
 ## 文件说明
 
 - `profile/README.md`：展示在组织 Overview 页面的公开介绍。
-- `profile/assets/banner.webp`：无损全彩 3D 动态横幅，96 帧、4.8 秒循环。
+- `profile/assets/banner.webp`：无损全彩 3D 动态横幅，9.2 秒循环；按 25 帧/秒渲染，编码时合并相同的停留帧。
 - `profile/assets/banner.gif`：兼容不支持 WebP 的浏览器的动画版本。
 - `profile/assets/banner-static.png`：静态横幅，供启用减少动态效果的访客使用。
 - `profile/assets/hscredit-logo.svg`：官网原始矢量 Logo，作为立体几何和配色的来源。
@@ -30,7 +30,8 @@ GitHub 会从组织的公开 `.github` 仓库读取 `profile/README.md`。
 ## 重新生成动态横幅
 
 原始 Logo 来源：`https://hengshucredit.com/images/hengshucredit_animated.svg`。
-渲染器沿用原始矢量路径和渐变，通过轮廓挤出、明显的左右摆动、浮动和移动高光呈现立体效果。
+渲染器沿用原始矢量路径和渐变。圆弧逐步画出，独立斜笔画归位，CREDIT 字母依次组成完整 Logo；短暂停留后，绕竖轴旋转一整圈，速度由慢到快再到慢。
+旋转采用五次平滑插值，起止角速度为零。左侧文字在整个动画中保持静止。
 横幅以大字号中文展示官网已有定位，并列出 HSCredit、天枢决策引擎和瑶光营销平台的既有介绍。
 优先展示无损 WebP，保留渐变与字体细节；以 GIF 兼容其他浏览器。GitHub 无需执行脚本即可展示动画；README 同时提供减少动态效果的静态版本。
 
@@ -43,6 +44,9 @@ python tools/render_banner.py
 ```
 
 `--preview` 仅更新静态预览；正式生成会同时更新 WebP、GIF 和静态横幅。
+静态预览取自组合完成后的 2.52 秒，避免首帧空白；可通过 `--output-dir` 将预览输出到独立目录。
+
+动画分镜：0–2.2 秒组合，2.2–2.8 秒停留，2.8–7.2 秒完整旋转，7.2–8.4 秒停留，8.4–8.9 秒淡出，随后短暂停顿再循环。
 
 ## 横幅文案来源
 

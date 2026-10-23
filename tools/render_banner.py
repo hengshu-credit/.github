@@ -1,4 +1,4 @@
-"""Render the original HSCredit logo with prominent 3D motion and positioning.
+"""Assemble the original HSCredit logo, then give it one eased 360-degree turn.
 
 python tools/render_banner.py --preview
 python tools/render_banner.py
@@ -26,8 +26,21 @@ ASSETS = ROOT/'profile'/'assets'
 W,H = 1600,520
 SW,SH = 760,600
 V = 566.92914
-DEPTH = .16
-LOOP_MS = 4800
+DEPTH = .10
+LOOP_MS = 9200
+POSTER_MS = 2520
+
+
+def smoothstep(value):
+    t=float(np.clip(value,0,1))
+    return t*t*t*(10+t*(-15+6*t))
+
+
+def animation_state(seconds):
+    """Assembly, readable hold, slow-fast-slow full turn, hold, fade and reset."""
+    turn=smoothstep((seconds-2.8)/4.4)*math.tau
+    fade=1.-smoothstep((seconds-8.4)/.5)
+    return turn,fade
 
 
 def font(size,bold=False,chinese=False):
@@ -103,16 +116,12 @@ def logo_mesh(paths):
     return result
 
 
-def backdrop(logo):
+def backdrop():
     yy,xx=np.mgrid[:H,:W]
     data=np.zeros((H,W,3))+[6,10,22]
     for x,y,s,c in [(1240,220,300,[24,9,53]),(1050,250,250,[0,12,24]),(450,150,600,[3,5,10])]:
         data+=np.exp(-((xx-x)**2+(yy-y)**2)/(2*s*s))[...,None]*c
     im=Image.fromarray(np.uint8(data),'RGB').convert('RGBA')
-    # The watermark is the brand's own silhouette, not an unrelated motif.
-    watermark=Image.new('RGBA',(740,740),(112,72,190,0))
-    watermark.putalpha(logo.getchannel('A').resize((740,740)).point(lambda x:int(x*.032)))
-    im.alpha_composite(watermark,(1030,-125))
     d=ImageDraw.Draw(im)
     d.text((72,45),'衡枢真信',font=font(36,True,True),fill='#dce7f4')
     label(d,(244,60),'HENGSHU CREDIT',21,'#98b2cc',1.8)
@@ -139,29 +148,47 @@ uv=in_uv;face=abs(in_normal.z);gl_Position=vp*p;}
 '''
 FRAGMENT='''#version 330
 in vec3 pos;in vec3 n;in vec2 uv;in float face;
-uniform sampler2D logo;uniform sampler2D bevel;uniform mat4 model;uniform float phase;out vec4 color;
+uniform sampler2D logo;uniform sampler2D bevel;uniform mat4 model;
+uniform float reveal;uniform float opacity;uniform int part;out vec4 color;
 void main(){
+ float drawingHead=0.;
+ if(part==8 && reveal<.9999){
+   float order;
+   // Follow the two circular outlines before filling their joining strokes.
+   float upperRadius=length(uv-vec2(.433,.755));
+   float lowerRadius=length(uv-vec2(.60,.425));
+   if(uv.y>.54 && upperRadius>.14 && upperRadius<.245){
+     float a=atan(uv.y-.755,uv.x-.433);
+     order=.38*fract((a-.12)/6.2831853);
+   }else if(uv.y<.64 && lowerRadius>.13 && lowerRadius<.245){
+     float a=atan(uv.y-.425,uv.x-.60);
+     order=.40+.38*fract((a+2.25)/6.2831853);
+   }else{order=.80+.19*clamp((.98-uv.y)/.55,0.,1.);}
+   if(order>reveal)discard;
+   drawingHead=exp(-pow((order-reveal)/.018,2.));
+ }
  vec3 bevelNormal=mat3(model)*(texture(bevel,uv).rgb*2.-1.);
  vec3 norm=normalize(mix(n,bevelNormal,step(.5,face))),view=normalize(vec3(0.,0.,7.2)-pos);
- vec3 light=normalize(vec3(-3.+sin(phase)*4.,4.,6.)-pos);
+ vec3 light=normalize(vec3(-3.,4.,6.)-pos);
  float diffuse=max(dot(norm,light),0.);
  float spec=pow(max(dot(norm,normalize(light+view)),0.),80.);
  vec3 original=texture(logo,uv).rgb;
- float sweep=exp(-pow((uv.x+.3*uv.y-(.65+.8*sin(phase)))*10.,2.));
- vec3 front=original*(.88+.12*diffuse)+vec3(.18,.24,.3)*spec+vec3(.22,.32,.40)*sweep;
+ vec3 front=original*(.88+.12*diffuse)+vec3(.18,.24,.3)*spec+vec3(.24,.40,.48)*drawingHead;
  float hue=clamp(uv.x*.6+(1.-uv.y)*.4,0.,1.);
- vec3 edge=mix(vec3(.06,.40,.62),vec3(.31,.07,.52),hue);
- vec3 side=edge*(.5+.7*diffuse)+vec3(.3,.4,.6)*spec;
- color=vec4(mix(side,front,step(.5,face)),1.);
+ vec3 edge=mix(vec3(.14,.34,.50),vec3(.31,.13,.44),hue);
+ vec3 side=edge*(.5+.7*diffuse)+vec3(.4,.5,.65)*spec;
+ color=vec4(mix(side,front,step(.5,face)),opacity);
 }
 '''
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--frames',type=int,default=96)
-    args=parser.parse_args();paths,logo=logo_source();geometry=logo_mesh(paths)
+    parser=argparse.ArgumentParser();parser.add_argument('--preview',action='store_true');parser.add_argument('--frames',type=int,default=230)
+    parser.add_argument('--output-dir',type=Path,default=ASSETS)
+    args=parser.parse_args();paths,logo=logo_source();parts=[logo_mesh([p]) for p in paths]
+    output=args.output_dir;output.mkdir(parents=True,exist_ok=True)
     ctx=moderngl.create_standalone_context(require=330)
-    print('Rendering original logo:',len(geometry)//3,'triangles;',ctx.info['GL_RENDERER'],flush=True)
+    print('Rendering original logo:',sum(len(p) for p in parts)//3,'triangles;',ctx.info['GL_RENDERER'],flush=True)
     prog=ctx.program(vertex_shader=VERTEX,fragment_shader=FRAGMENT)
     tex=ctx.texture(logo.size,4,logo.transpose(Image.Transpose.FLIP_TOP_BOTTOM).tobytes());tex.use(0)
     tex.filter=(moderngl.LINEAR,moderngl.LINEAR)
@@ -175,7 +202,7 @@ def main():
     normal_image=Image.fromarray(np.uint8(np.clip(normals*.5+.5,0,1)*255),'RGB')
     bevel=ctx.texture(logo.size,3,normal_image.transpose(Image.Transpose.FLIP_TOP_BOTTOM).tobytes())
     bevel.filter=(moderngl.LINEAR,moderngl.LINEAR);bevel.use(1);prog['bevel'].value=1
-    vao=ctx.vertex_array(prog,[(ctx.buffer(geometry),'3f 3f 2f','in_pos','in_normal','in_uv')])
+    vaos=[ctx.vertex_array(prog,[(ctx.buffer(p),'3f 3f 2f','in_pos','in_normal','in_uv')]) for p in parts]
     f=1/math.tan(math.radians(36)/2)
     projection=np.array([[f/(SW/SH),0,0,0],[0,f,0,0],[0,0,-1.004,-.2004],[0,0,-1,0]])
     view=np.eye(4);view[2,3]=-7.2
@@ -183,23 +210,40 @@ def main():
     samples=min(4,ctx.max_samples)
     ms=ctx.framebuffer(ctx.renderbuffer((SW,SH),components=4,samples=samples),ctx.depth_renderbuffer((SW,SH),samples=samples))
     fbo=ctx.simple_framebuffer((SW,SH),components=4);ctx.enable(moderngl.DEPTH_TEST)
-    bg=backdrop(logo);frames=[];count=1 if args.preview else args.frames
+    bg=backdrop();frames=[];count=1 if args.preview else args.frames
+    poster_index=round(POSTER_MS*args.frames/LOOP_MS)
     for i in range(count):
-        phase=math.tau*i/args.frames
-        model=rotation(.08+.62*math.sin(phase),'y')@rotation(.16*math.cos(phase),'x')@rotation(.035*math.sin(phase),'z')
-        model[:3,:3]*=1.+.035*math.sin(phase)
-        model[1,3]=.09*math.sin(2*phase)
-        prog['model'].write(model.T.astype('f4').tobytes());prog['phase'].value=phase
-        ms.use();ms.clear(0,0,0,0);vao.render();ctx.copy_framebuffer(fbo,ms)
+        seconds=POSTER_MS/1000 if args.preview else i*LOOP_MS/(args.frames*1000)
+        turn,fade=animation_state(seconds)
+        base=rotation(turn+.06,'y')@rotation(.035,'x')
+        ms.use();ms.clear(0,0,0,0)
+        for part_index in [8,7,6,0,1,2,3,4,5]:
+            model=base.copy();reveal=1.;alpha=fade
+            if part_index==8:
+                reveal=smoothstep((seconds-.15)/1.45)
+                alpha*=smoothstep((seconds-.15)/.25)
+            elif part_index in (6,7):
+                progress=smoothstep((seconds-(.95 if part_index==7 else 1.10))/.65)
+                offset=np.eye(4)
+                offset[:2,3]=np.array([-.4,-.72] if part_index==7 else [.3,.55])*(1-progress)
+                model=base@offset;alpha*=progress
+            else:
+                progress=smoothstep((seconds-(1.40+part_index*.085))/.38)
+                offset=np.eye(4);offset[1,3]=-.32*(1-progress)
+                model=base@offset;alpha*=progress
+            if alpha<.001:continue
+            prog['model'].write(model.T.astype('f4').tobytes())
+            prog['part'].value=part_index;prog['reveal'].value=reveal;prog['opacity'].value=alpha
+            vaos[part_index].render()
+        ctx.copy_framebuffer(fbo,ms)
         scene=Image.frombytes('RGBA',(SW,SH),fbo.read(components=4,alignment=1)).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         frame=bg.copy()
         glow=scene.filter(ImageFilter.GaussianBlur(20))
-        intensity=.26+.10*math.sin(phase)
-        glow.putalpha(glow.getchannel('A').point(lambda a:int(a*intensity)))
+        glow.putalpha(glow.getchannel('A').point(lambda a:int(a*.18)))
         frame.alpha_composite(glow,(790,-40));frame.alpha_composite(scene,(790,-40))
         mask=Image.new('L',(W,H));ImageDraw.Draw(mask).rounded_rectangle((0,0,W-1,H-1),radius=24,fill=255)
         frame.putalpha(mask)
-        if i==0: frame.save(ASSETS/'banner-static.png',optimize=True)
+        if args.preview or i==poster_index: frame.save(output/'banner-static.png',optimize=True)
         frames.append(frame.convert('RGB').resize((1440,468),Image.Resampling.LANCZOS))
         if i%24==0: print(f'Rendered {i+1}/{count}',flush=True)
     if not args.preview:
@@ -215,10 +259,10 @@ def main():
         palette=atlas.quantize(colors=256,method=Image.Quantize.MEDIANCUT)
         indexed=[f.quantize(palette=palette,dither=Image.Dither.NONE) for f in frames]
         durations=[round((i+1)*(LOOP_MS/10)/args.frames)*10-round(i*(LOOP_MS/10)/args.frames)*10 for i in range(args.frames)]
-        frames[0].save(ASSETS/'banner.webp',format='WEBP',save_all=True,append_images=frames[1:],duration=durations,loop=0,lossless=True,method=4)
-        indexed[0].save(ASSETS/'banner.gif',save_all=True,append_images=indexed[1:],duration=durations,loop=0,optimize=True,disposal=1)
-        print('Lossless WebP bytes:',(ASSETS/'banner.webp').stat().st_size,flush=True)
-        print('GIF bytes:',(ASSETS/'banner.gif').stat().st_size,flush=True)
+        frames[0].save(output/'banner.webp',format='WEBP',save_all=True,append_images=frames[1:],duration=durations,loop=0,lossless=True,method=4)
+        indexed[0].save(output/'banner.gif',save_all=True,append_images=indexed[1:],duration=durations,loop=0,optimize=True,disposal=1)
+        print('Lossless WebP bytes:',(output/'banner.webp').stat().st_size,flush=True)
+        print('GIF bytes:',(output/'banner.gif').stat().st_size,flush=True)
 
 
 if __name__=='__main__':main()
