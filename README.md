@@ -6,6 +6,13 @@
 
 - `profile/README.md`：展示在组织 Overview 页面的公开介绍。
 - `profile/assets/banner.svg`：主页使用的蓝紫色品牌横幅。
+- `profile/assets/wechat.svg`：微信二维码。
+- `profile/assets/wechat-official-account.svg`：微信公众号二维码。
+
+联系方式与 HSCredit 公开 README 保持一致。二维码取自官网联系页使用的
+`https://hengshucredit.com/images/itlubber.svg` 和
+`https://hengshucredit.com/images/itlubber_art.svg`，保存在本仓库中，并添加白色背景以适配 GitHub 深色主题。
+更新二维码时应保留完整码点与周围留白，并核对扫描结果。
 
 ## 更新方式
 
