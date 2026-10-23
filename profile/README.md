@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.svg" alt="Hengshu Credit — 风控建模、智能决策、客户营销与电商交易" width="100%">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner-static.png">
+    <img src="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.gif" alt="Hengshu Credit — 以 HSCredit 原始 Logo 为主体的 3D 动态横幅" width="100%">
+  </picture>
 </p>
 
 <h1 align="center">衡枢真信 · Hengshu Credit</h1>
