@@ -40,7 +40,7 @@
 
 ## 交流与关注
 
-<table>
+<table align="center">
   <tr>
     <th align="center">微信 · itlubber</th>
     <th align="center">微信公众号 · 衡枢风控</th>
