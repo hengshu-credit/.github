@@ -1,9 +1,9 @@
 <p align="center">
   <picture>
-    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner-static.png?v=20261113-1">
-    <source type="image/svg+xml" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.svg?v=20261113-1">
-    <source type="image/webp" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.webp?v=20261113-1">
-    <img src="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.gif?v=20261113-1" alt="衡枢真信 — 专注金融风控技术与服务：风控能力输出、模型评分服务、分析工具开源；hscredit、天枢决策引擎、瑶光营销系统、观星监控平台" width="100%">
+    <source media="(prefers-reduced-motion: reduce)" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner-static.png?v=20261113-2">
+    <source type="image/svg+xml" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.svg?v=20261113-2">
+    <source type="image/webp" srcset="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.webp?v=20261113-2">
+    <img src="https://raw.githubusercontent.com/hengshu-credit/.github/main/profile/assets/banner.gif?v=20261113-2" alt="衡枢真信 — 专注金融风控技术与服务：风控能力输出、模型评分服务、分析工具开源；hscredit、天枢决策引擎、瑶光营销系统、观星监控平台" width="100%">
   </picture>
 </p>
 

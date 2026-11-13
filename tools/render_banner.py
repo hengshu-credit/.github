@@ -51,10 +51,9 @@ def main():
     options = dict(save_all=True, append_images=frames[1:], duration=delays, loop=0)
     frames[0].save(output / "banner.webp", lossless=True, method=4, **options)
     # A shared palette keeps the static text and card colors identical between frames.
-    # Include extra logo pixels so its gradient survives GIF color quantization.
-    sample = frames[0].copy()
-    sample.paste(frames[len(frames) // 4].crop((1044, 74, 1440, 468)), (1044, 74))
-    palette = sample.quantize(colors=256)
+    # Sample the fully assembled mark and preserve the deep background and gradients.
+    sample = frames[round(0.27 * len(frames))]
+    palette = sample.quantize(colors=256, method=Image.Quantize.MAXCOVERAGE, kmeans=1)
     indexed = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
     indexed[0].save(output / "banner.gif", save_all=True, append_images=indexed[1:],
                     duration=delays, loop=0, disposal=1)

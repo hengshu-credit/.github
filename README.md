@@ -4,9 +4,9 @@
 
 ## 主页横幅
 
-`profile/assets/banner.svg` 是横幅源文件，画布为 1600 × 520。配色、渐变字标和项目卡片参考 [hscredit 品牌色卡](https://github.com/hengshu-credit/hscredit/blob/main/docs/assets/brand/hscredit-color-card.png)。右侧内嵌 [hscredit loading SVG](https://github.com/hengshu-credit/hscredit/blob/8876a5c7b517bda9bc98026c84153754fa95a0ad/docs/assets/brand/hscredit-loading.svg)，保留原图的 9.2 秒循环动画。
+`profile/assets/banner.svg` 是横幅源文件，画布为 1600 × 520。页眉沿用 [hscredit 品牌色卡](https://github.com/hengshu-credit/hscredit/blob/main/docs/assets/brand/hscredit-color-card.svg)中的公司标志、全称、标语和渐变字标。正文与页脚共用页眉的深紫底色，底部列出版权、开源地址与微信联系方式。右侧内嵌 [hscredit loading SVG](https://github.com/hengshu-credit/hscredit/blob/8876a5c7b517bda9bc98026c84153754fa95a0ad/docs/assets/brand/hscredit-loading.svg)，保留原图的 9.2 秒循环动画。
 
-横幅沿用官网的[业务定位](https://hengshucredit.com/)与[服务介绍](https://hengshucredit.com/solutions/)。四张项目卡片与主页中的项目顺序一致，分别展示 hscredit、天枢决策引擎、瑶光营销系统和观星监控平台。
+横幅沿用官网的[业务定位](https://hengshucredit.com/)与[服务介绍](https://hengshucredit.com/solutions/)。四个项目栏目与主页中的项目顺序一致，分别展示 hscredit、天枢决策引擎、瑶光营销系统和观星监控平台。
 
 编辑 SVG 后，生成用于减少动态效果的静态 PNG，以及 WebP 和 GIF 动画备用图。在装有微软雅黑或思源黑体的环境中运行：
 
